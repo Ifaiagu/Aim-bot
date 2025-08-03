@@ -85,12 +85,9 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 RunService.RenderStepped:Connect(function()
-    -- CORREÇÃO: Atualiza posição do FOV para seguir o mouse
-    local mousePos = UserInputService:GetMouseLocation()
-    fovCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
-    
-    -- Controla visibilidade do FOV
-    fovCircle.Visible = fovAtivo
+    -- FOV Circle fixado no centro da tela
+    fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    fovCircle.Visible  = fovAtivo
 
     if espAtivo then
         for _, player in pairs(Players:GetPlayers()) do
@@ -174,9 +171,12 @@ RunService.RenderStepped:Connect(function()
             if autoShootAtivo then
                 local focused = UserInputService:GetFocusedTextBox()
                 if not focused then
-                    mouse1press()
-                    task.wait(0.1)
-                    mouse1release()
+                    -- Use mouse1press e mouse1release para simular clique esquerdo do mouse
+                    pcall(function()
+                        mouse1press()
+                        task.wait(0.1)
+                        mouse1release()
+                    end)
                 end
             end
         end
