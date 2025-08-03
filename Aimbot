@@ -1,291 +1,215 @@
---[[ LocalScript em StarterGui > ScreenGui
-Nome do Script: DaviBOT_Hub ]]
+-- DaviBOT Hub Final v2
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Rayfield UI
-local Rayfield           = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Players            = game:GetService("Players")
-local RunService         = game:GetService("RunService")
-local Camera             = workspace.CurrentCamera
-local LocalPlayer        = Players.LocalPlayer
-local Workspace          = game:GetService("Workspace")
-local UserInputService   = game:GetService("UserInputService")
-local VirtualUser        = game:GetService("VirtualUser")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
 
--- Estado das funcionalidades
-local aimbotAtivo        = false
-local autoShootAtivo     = false
-local espAtivo           = false
-local teamCheckAtivo     = false
-local noclipAtivo        = false
-local infiniteJumpAtivo  = false
-local fovAtivo           = false
-local wallCheckAtivo     = true
-local AimPart            = "Head"
-
--- Cor do ESP
-local espModoColorido    = true
-local corPersonalizada   = Color3.fromRGB(0, 255, 0)
-
--- UI Setup
-local Window = Rayfield:CreateWindow({
-   Name                  = "DaviBOT",
-   LoadingTitle          = "AimBOT",
-   LoadingSubtitle       = "by DAVI",
-   ConfigurationSaving   = { Enabled = true, FolderName = nil, FileName = "Aura Hub" },
-   Discord               = { Enabled = true, Invite = "JF2F2RANud", RememberJoins = false },
-   KeySystem             = false,
-   ToggleUIKeybind       = "K",
-   Theme                 = "Dark",
-})
-
-local AuraHub = Window:CreateTab("Aura Hub", 4483362458)
-AuraHub:CreateSection("Funções DaviBOT")
+-- Variáveis de controle
+local AimbotEnabled = false
+local AutoShootEnabled = false
+local ESPEnabled = false
+local TeamCheck = false
+local AimPart = "Head"
+local FOVSize = 100
+local FOVColor = Color3.fromRGB(255, 255, 0)
+local ESPColor = Color3.fromRGB(0, 255, 0)
 
 -- FOV Circle
-local fovCircle = Drawing.new("Circle")
-fovCircle.Visible      = false
-fovCircle.Radius       = 100
-fovCircle.Color        = Color3.fromRGB(0, 255, 0)
-fovCircle.Thickness    = 1
-fovCircle.Transparency = 1
-fovCircle.Filled       = false
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Color = FOVColor
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 100
+FOVCircle.Filled = false
+FOVCircle.Radius = FOVSize
+FOVCircle.Visible = true
+
+-- Função de WallCheck
+local function IsVisible(targetPart)
+	local origin = Camera.CFrame.Position
+	local direction = (targetPart.Position - origin)
+	local result = workspace:Raycast(origin, direction, {LocalPlayer.Character, Camera})
+	return not result or result.Instance:IsDescendantOf(targetPart.Parent)
+end
+
+-- Função para encontrar o inimigo mais próximo
+local function GetClosestPlayer()
+	local closestPlayer = nil
+	local shortestDistance = math.huge
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character:FindFirstChild(AimPart) then
+			if player.Character.Humanoid.Health > 0 then
+				if not TeamCheck or player.Team ~= LocalPlayer.Team then
+					local part = player.Character[AimPart]
+					local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+					local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
+					if onScreen and dist < FOVSize and IsVisible(part) then
+						if dist < shortestDistance then
+							shortestDistance = dist
+							closestPlayer = player
+						end
+					end
+				end
+			end
+		end
+	end
+	return closestPlayer
+end
 
 -- ESP
-local espMap = {}
-local function createESP(player)
-    if espMap[player] then return end
-
-    local box = Drawing.new("Square")
-    box.Thickness = 2
-    box.Filled = false
-    box.Visible = false
-
-    local name = Drawing.new("Text")
-    name.Size = 14
-    name.Center = true
-    name.Outline = true
-    name.Visible = false
-
-    espMap[player] = { box = box, name = name }
+local ESPObjects = {}
+local function ClearESP()
+	for _, v in pairs(ESPObjects) do
+		if v.box then v.box:Remove() end
+		if v.line then v.line:Remove() end
+	end
+	ESPObjects = {}
 end
 
-local function removeESP(player)
-    if espMap[player] then
-        espMap[player].box:Remove()
-        espMap[player].name:Remove()
-        espMap[player] = nil
-    end
+local function CreateESP(player)
+	local box = Drawing.new("Square")
+	box.Thickness = 1
+	box.Filled = false
+	box.Transparency = 1
+	box.Color = ESPColor
+
+	local line = Drawing.new("Line")
+	line.Thickness = 1
+	line.Transparency = 1
+	line.Color = ESPColor
+
+	ESPObjects[player] = {box = box, line = line}
 end
 
-Players.PlayerRemoving:Connect(removeESP)
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
-        task.wait(1)
-        if espAtivo then createESP(player) end
-    end)
-end)
+local function UpdateESP()
+	if not ESPEnabled then ClearESP() return end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			if not ESPObjects[player] then
+				CreateESP(player)
+			end
+			local hrp = player.Character.HumanoidRootPart
+			local pos, onscreen = Camera:WorldToViewportPoint(hrp.Position)
+			local boxObj = ESPObjects[player]
+			if onscreen then
+				local size = 50
+				boxObj.box.Position = Vector2.new(pos.X - size/2, pos.Y - size)
+				boxObj.box.Size = Vector2.new(size, size)
+				boxObj.box.Visible = true
 
+				boxObj.line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+				boxObj.line.To = Vector2.new(pos.X, pos.Y)
+				boxObj.line.Visible = true
+
+				boxObj.box.Color = ESPColor
+				boxObj.line.Color = ESPColor
+			else
+				boxObj.box.Visible = false
+				boxObj.line.Visible = false
+			end
+		end
+	end
+end
+
+-- Auto Shoot
 RunService.RenderStepped:Connect(function()
-    -- Centraliza o círculo do FOV na tela
-    fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    fovCircle.Visible  = fovAtivo
+	local target = GetClosestPlayer()
+	FOVCircle.Radius = FOVSize
+	FOVCircle.Color = FOVColor
+	FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
-    if espAtivo then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                createESP(player)
-                local esp = espMap[player]
-                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
-                    local dist = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                    local color = espModoColorido and Color3.fromHSV(math.clamp(dist / 200, 0, 1), 1, 1) or corPersonalizada
+	UpdateESP()
 
-                    if onScreen and (not teamCheckAtivo or player.Team ~= LocalPlayer.Team) then
-                        local w, h = 30, 60
-                        esp.box.Position = Vector2.new(pos.X - w/2, pos.Y - h/2)
-                        esp.box.Size     = Vector2.new(w, h)
-                        esp.box.Color    = color
-                        esp.box.Visible  = true
-
-                        esp.name.Text     = player.Name
-                        esp.name.Position = Vector2.new(pos.X, pos.Y - h/2 - 10)
-                        esp.name.Color    = color
-                        esp.name.Visible  = true
-                    else
-                        esp.box.Visible = false
-                        esp.name.Visible = false
-                    end
-                else
-                    esp.box.Visible = false
-                    esp.name.Visible = false
-                end
-            end
-        end
-    else
-        for _, esp in pairs(espMap) do
-            esp.box.Visible = false
-            esp.name.Visible = false
-        end
-    end
+	if AimbotEnabled and target then
+		local aimPos = target.Character[AimPart].Position
+		Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimPos)
+		if AutoShootEnabled then
+			VirtualUser:ClickButton1(Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2))
+		end
+	end
 end)
 
--- Aimbot
-local function getClosestPlayer()
-    local closest, shortest = nil, math.huge
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(AimPart) and (not teamCheckAtivo or player.Team ~= LocalPlayer.Team) then
-            
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid and humanoid.Health > 0 then  -- Verifica se está vivo
-
-                local pos, onscreen = Camera:WorldToViewportPoint(player.Character[AimPart].Position)
-                if onscreen then
-                    if wallCheckAtivo then
-                        local origin = Camera.CFrame.Position
-                        local direction = (player.Character[AimPart].Position - origin)
-                        local rayParams = RaycastParams.new()
-                        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-                        rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
-                        local result = workspace:Raycast(origin, direction, rayParams)
-                        if result and result.Instance and not player.Character:IsAncestorOf(result.Instance) then
-                            continue
-                        end
-                    end
-
-                    local dist2d = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
-                    if dist2d < shortest and dist2d <= fovCircle.Radius then
-                        shortest = dist2d
-                        closest = player
-                    end
-                end
-            end
-        end
-    end
-    return closest
-end
-
-RunService.RenderStepped:Connect(function()
-    if aimbotAtivo then
-        local target = getClosestPlayer()
-        if target and target.Character and target.Character:FindFirstChild(AimPart) then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character[AimPart].Position)
-            if autoShootAtivo then
-                local focused = UserInputService:GetFocusedTextBox()
-                if not focused then
-                    pcall(function()
-                        VirtualUser:ClickButton1(Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2))
-                    end)
-                end
-            end
-        end
-    end
-end)
-
--- Noclip
-RunService.Stepped:Connect(function()
-    if noclipAtivo and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-        LocalPlayer.Character.Humanoid:ChangeState(11)
-    end
-end)
-
--- Infinite Jump
-UserInputService.JumpRequest:Connect(function()
-    if infiniteJumpAtivo and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
-    end
-end)
-
--- Toggles e controles no HUB
-AuraHub:CreateToggle({
-    Name = "Aimbot (Head)",
-    CurrentValue = false,
-    Callback = function(v) aimbotAtivo = v end
+-- Criação do HUB
+local Window = Rayfield:CreateWindow({
+	Name = "DaviBOT Hub",
+	LoadingTitle = "DaviBOT Hub",
+	LoadingSubtitle = "by David",
+	ConfigurationSaving = {
+		Enabled = true,
+		FolderName = "DaviBOTHub",
+		FileName = "DaviBOT_Config"
+	},
+	KeySystem = false
 })
 
-AuraHub:CreateToggle({
-    Name = "Auto Shoot",
-    CurrentValue = false,
-    Callback = function(v) autoShootAtivo = v end
+local MainTab = Window:CreateTab("Principal", 4483362458)
+
+MainTab:CreateToggle({
+	Name = "Aimbot",
+	CurrentValue = false,
+	Callback = function(Value)
+		AimbotEnabled = Value
+	end
 })
 
-AuraHub:CreateToggle({
-    Name = "ESP",
-    CurrentValue = false,
-    Callback = function(v) espAtivo = v end
+MainTab:CreateToggle({
+	Name = "Auto Shoot",
+	CurrentValue = false,
+	Callback = function(Value)
+		AutoShootEnabled = Value
+	end
 })
 
-AuraHub:CreateToggle({
-    Name = "TeamCheck",
-    CurrentValue = false,
-    Callback = function(v) teamCheckAtivo = v end
+MainTab:CreateToggle({
+	Name = "ESP",
+	CurrentValue = false,
+	Callback = function(Value)
+		ESPEnabled = Value
+		if not Value then
+			ClearESP()
+		end
+	end
 })
 
-AuraHub:CreateToggle({
-    Name = "Noclip",
-    CurrentValue = false,
-    Callback = function(v) noclipAtivo = v end
+MainTab:CreateDropdown({
+	Name = "AimPart",
+	Options = {"Head", "HumanoidRootPart"},
+	CurrentOption = "Head",
+	Callback = function(Option)
+		AimPart = Option
+	end
 })
 
-AuraHub:CreateToggle({
-    Name = "Pulo Infinito",
-    CurrentValue = false,
-    Callback = function(v) infiniteJumpAtivo = v end
+MainTab:CreateToggle({
+	Name = "Team Check",
+	CurrentValue = false,
+	Callback = function(Value)
+		TeamCheck = Value
+	end
 })
 
-AuraHub:CreateToggle({
-    Name = "FOV Círculo",
-    CurrentValue = false,
-    Callback = function(v) fovAtivo = v end
+MainTab:CreateSlider({
+	Name = "Tamanho do FOV",
+	Range = {20, 300},
+	Increment = 5,
+	CurrentValue = 100,
+	Callback = function(Value)
+		FOVSize = Value
+	end
 })
 
-AuraHub:CreateToggle({
-    Name = "Wall Check (Bloqueio por parede)",
-    CurrentValue = true,
-    Callback = function(v) wallCheckAtivo = v end
+MainTab:CreateColorPicker({
+	Name = "Cor do FOV",
+	Color = FOVColor,
+	Callback = function(Color)
+		FOVColor = Color
+	end
 })
 
-AuraHub:CreateDropdown({
-    Name = "Aimbot Aim Part",
-    Options = { "Head", "UpperTorso", "LowerTorso", "HumanoidRootPart" },
-    CurrentOption = AimPart,
-    Callback = function(opt) AimPart = opt end
-})
-
-AuraHub:CreateDropdown({
-    Name = "Modo do ESP",
-    Options = { "Colorido", "Verde", "Vermelho", "Azul", "Branco" },
-    CurrentOption = "Colorido",
-    Callback = function(opt)
-        espModoColorido = (opt == "Colorido")
-        if opt == "Verde" then
-            corPersonalizada = Color3.fromRGB(0, 255, 0)
-        elseif opt == "Vermelho" then
-            corPersonalizada = Color3.fromRGB(255, 0, 0)
-        elseif opt == "Azul" then
-            corPersonalizada = Color3.fromRGB(0, 0, 255)
-        elseif opt == "Branco" then
-            corPersonalizada = Color3.fromRGB(255, 255, 255)
-        end
-    end
-})
-
-AuraHub:CreateSlider({
-    Name = "Tamanho do FOV",
-    Range = {20, 500},
-    Increment = 5,
-    Suffix = "px",
-    CurrentValue = fovCircle.Radius,
-    Callback = function(value)
-        fovCircle.Radius = value
-    end
-})
-
-AuraHub:CreateParagraph({
-    Title = "DaviBOT HUB",
-    Content = "Funções 100% integradas: escolha o AimPart, visualize ESP personalizado ou colorido, veja nick e ajuste as boxes."
-})
+MainTab:CreateColorPicker({
+	Name = "Cor do ESP",
+	Color =
