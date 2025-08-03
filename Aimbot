@@ -212,4 +212,8 @@ MainTab:CreateColorPicker({
 
 MainTab:CreateColorPicker({
 	Name = "Cor do ESP",
-	Color =
+	Color = ESPColor,
+	Callback = function(Color)
+		ESPColor = Color
+	end
+})
