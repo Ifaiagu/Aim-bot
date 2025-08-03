@@ -85,8 +85,12 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 RunService.RenderStepped:Connect(function()
-    fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-    fovCircle.Visible  = fovAtivo
+    -- CORREÇÃO: Atualiza posição do FOV para seguir o mouse
+    local mousePos = UserInputService:GetMouseLocation()
+    fovCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
+    
+    -- Controla visibilidade do FOV
+    fovCircle.Visible = fovAtivo
 
     if espAtivo then
         for _, player in pairs(Players:GetPlayers()) do
